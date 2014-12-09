@@ -1,0 +1,5 @@
+[package]
+
+name = "pubsub"
+version = "0.0.1"
+authors = ["Mark Schifflin <rschifflin@hotmail.com>"]
