@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::collections::hash_map::HashMap;
+use std::collections::hash_map::Entry::{Occupied, Vacant};
 
 pub struct Pubsub<'a, C:'a, P> {
   pub context: &'a mut C,
@@ -27,7 +28,7 @@ impl<'a, C, P: Clone> Pubsub<'a, C, P> {
   }
 
   pub fn subscribe(&mut self, channel: String, listener: fn(&mut C, P) -> Vec<Event<P>>) {
-    if !(Pubsub::try_existing(self.listeners.find_mut(&channel), listener)) {
+    if !(Pubsub::try_existing(self.listeners.get_mut(&channel), listener)) {
       let mut v = Vec::new();
       v.push(listener);
       self.listeners.insert(channel, v);
@@ -35,14 +36,16 @@ impl<'a, C, P: Clone> Pubsub<'a, C, P> {
   }
 
   fn process_event(&mut self, event: Event<P>)  {
-    let listeners_opt = self.listeners.find(&(event.channel));
+    let listeners_entry = self.listeners.entry(event.channel);
     let ref mut context = self.context;
 
-    match listeners_opt {
-      Some(listeners) => for listener in listeners.iter() {
-        self.event_queue = self.event_queue + (*listener)(*context, event.payload.clone());
+    match listeners_entry {
+      Occupied(mut listeners) => for listener in listeners.get_mut().iter() {
+        let head = self.event_queue.clone();
+        let tail = (*listener)(*context, event.payload.clone());
+        self.event_queue = head + tail.as_slice();
       },
-      None => ()
+      Vacant(_) => ()
     }
   }
 
@@ -168,10 +171,10 @@ fn listener_can_trigger_more_events() {
 
   fn listener_with_triggers(context: &mut TestContext, msg: String) -> Vec<Event<String>> {
     context.data += 1;
-    Vec::from_elem(1, Event {
+    vec![Event {
         channel: "test channel 2".to_string(),
         payload: "payload".to_string()
-    })
+    }]
   };
 
   fn plain_listener(context: &mut TestContext, msg: String) -> Vec<Event<String>> {
