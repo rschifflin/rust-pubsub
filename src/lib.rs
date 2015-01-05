@@ -1,20 +1,21 @@
+use std::hash::Hash;
 use std::collections::hash_map::HashMap;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 
-pub struct Pubsub<'a, C:'a, P> {
-  pub context: &'a mut C,
-  listeners: HashMap<String, Vec<fn(context: &mut C, payload: P) -> Vec<Event<P>>>>,
-  event_queue: Vec<Event<P>>
-}
-
 #[deriving(Clone)]
-pub struct Event<P> {
-  pub channel: String,
-  pub payload: P
+pub struct Event<Channel, Payload> {
+  pub channel: Channel,
+  pub payload: Payload
 }
 
-impl<'a, C, P: Clone> Pubsub<'a, C, P> {
-  pub fn new(context: &mut C) -> Pubsub<C, P> {
+pub struct Pubsub<'a, Context:'a, Channel: Hash + Eq + Clone, Payload: Clone> {
+  pub context: &'a mut Context,
+  listeners: HashMap<Channel, Vec<fn(context: &mut Context, payload: Payload) -> Vec<Event<Channel, Payload>>>>,
+  event_queue: Vec<Event<Channel, Payload>>
+}
+
+impl<'a, Context, Channel: Hash + Eq + Clone, Payload: Clone> Pubsub<'a, Context, Channel, Payload> {
+  pub fn new(context: &mut Context) -> Pubsub<Context, Channel, Payload> {
     Pubsub {
       context: context,
       listeners: HashMap::new(),
@@ -22,12 +23,12 @@ impl<'a, C, P: Clone> Pubsub<'a, C, P> {
     }
   }
 
-  pub fn publish(&mut self, event: Event<P>) {
+  pub fn publish(&mut self, event: Event<Channel, Payload>) {
     self.event_queue.push(event.clone());
     self.process_queue();
   }
 
-  pub fn subscribe(&mut self, channel: String, listener: fn(&mut C, P) -> Vec<Event<P>>) {
+  pub fn subscribe(&mut self, channel: Channel, listener: fn(&mut Context, Payload) -> Vec<Event<Channel, Payload>>) {
     if !(Pubsub::try_existing(self.listeners.get_mut(&channel), listener)) {
       let mut v = Vec::new();
       v.push(listener);
@@ -35,7 +36,7 @@ impl<'a, C, P: Clone> Pubsub<'a, C, P> {
     }
   }
 
-  fn process_event(&mut self, event: Event<P>)  {
+  fn process_event(&mut self, event: Event<Channel, Payload>)  {
     let listeners_entry = self.listeners.entry(event.channel);
     let ref mut context = self.context;
 
@@ -58,7 +59,7 @@ impl<'a, C, P: Clone> Pubsub<'a, C, P> {
     if self.event_queue.len() > 0 { self.process_queue(); }
   }
 
-  fn try_existing(existing: Option<&mut Vec<fn(&mut C, P) -> Vec<Event<P>>>>, listener: fn(&mut C, P) -> Vec<Event<P>>) -> bool {
+  fn try_existing(existing: Option<&mut Vec<fn(&mut Context, Payload) -> Vec<Event<Channel, Payload>>>>, listener: fn(&mut Context, Payload) -> Vec<Event<Channel, Payload>>) -> bool {
     match existing {
       Some(existing_vec) => {
         existing_vec.push(listener);
@@ -76,7 +77,7 @@ fn no_listeners_should_not_change() {
   }
 
   let mut test_context = TestContext { data: 0 };
-  let mut pubsub: Pubsub<TestContext, String> = Pubsub::new(&mut test_context);
+  let mut pubsub: Pubsub<TestContext, String, String> = Pubsub::new(&mut test_context);
   let event = Event {
     payload: "test payload".to_string(),
     channel: "test channel".to_string()
@@ -93,13 +94,13 @@ fn noop_listener_should_not_change() {
   }
 
   let mut test_context = TestContext { data: 0 };
-  let mut pubsub: Pubsub<TestContext, String> = Pubsub::new(&mut test_context);
+  let mut pubsub: Pubsub<TestContext, String, String> = Pubsub::new(&mut test_context);
   let event = Event {
     payload: "test payload".to_string(),
     channel: "test channel".to_string()
   };
 
-  fn noop_listener(context: &mut TestContext, msg: String) -> Vec<Event<String>> {
+  fn noop_listener(context: &mut TestContext, msg: String) -> Vec<Event<String, String>> {
     Vec::new()
   }
 
@@ -116,13 +117,13 @@ fn listener_on_same_channel_should_change() {
   }
 
   let mut test_context = TestContext { data: 0 };
-  let mut pubsub: Pubsub<TestContext, String> = Pubsub::new(&mut test_context);
+  let mut pubsub: Pubsub<TestContext, String, String> = Pubsub::new(&mut test_context);
   let event = Event {
     payload: "test payload".to_string(),
     channel: "test channel".to_string()
   };
 
-  fn listener(context: &mut TestContext, msg: String) -> Vec<Event<String>> {
+  fn listener(context: &mut TestContext, msg: String) -> Vec<Event<String, String>> {
     context.data += 1;
     Vec::new()
   };
@@ -140,13 +141,13 @@ fn listener_on_different_channel_should_not_change() {
   }
 
   let mut test_context = TestContext { data: 0 };
-  let mut pubsub: Pubsub<TestContext, String> = Pubsub::new(&mut test_context);
+  let mut pubsub: Pubsub<TestContext, String, String> = Pubsub::new(&mut test_context);
   let event = Event {
     payload: "test payload".to_string(),
     channel: "test channel".to_string()
   };
 
-  fn listener(context: &mut TestContext, msg: String) -> Vec<Event<String>> {
+  fn listener(context: &mut TestContext, msg: String) -> Vec<Event<String, String>> {
     context.data += 1;
     Vec::new()
   };
@@ -163,13 +164,13 @@ fn listener_can_trigger_more_events() {
     data: int
   }
   let mut test_context = TestContext { data: 0 };
-  let mut pubsub: Pubsub<TestContext, String> = Pubsub::new(&mut test_context);
+  let mut pubsub: Pubsub<TestContext, String, String> = Pubsub::new(&mut test_context);
   let event = Event {
     payload: "test payload".to_string(),
     channel: "test channel".to_string()
   };
 
-  fn listener_with_triggers(context: &mut TestContext, msg: String) -> Vec<Event<String>> {
+  fn listener_with_triggers(context: &mut TestContext, msg: String) -> Vec<Event<String, String>> {
     context.data += 1;
     vec![Event {
         channel: "test channel 2".to_string(),
@@ -177,7 +178,7 @@ fn listener_can_trigger_more_events() {
     }]
   };
 
-  fn plain_listener(context: &mut TestContext, msg: String) -> Vec<Event<String>> {
+  fn plain_listener(context: &mut TestContext, msg: String) -> Vec<Event<String, String>> {
     context.data += 1;
     Vec::new()
   }
