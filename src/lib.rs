@@ -2,7 +2,7 @@ use std::hash::Hash;
 use std::collections::hash_map::HashMap;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 
-#[deriving(Clone)]
+#[derive(Clone)]
 pub struct Event<Channel, Payload> {
   pub channel: Channel,
   pub payload: Payload
@@ -37,7 +37,7 @@ impl<'a, Context, Channel: Hash + Eq + Clone, Payload: Clone> Pubsub<'a, Context
   }
 
   fn process_event(&mut self, event: Event<Channel, Payload>)  {
-    let listeners_entry = self.listeners.entry(event.channel);
+    let listeners_entry = self.listeners.entry(&event.channel);
     let ref mut context = self.context;
 
     match listeners_entry {
