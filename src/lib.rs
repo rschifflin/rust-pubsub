@@ -1,3 +1,5 @@
+#![feature(std_misc)]
+
 use std::hash::Hash;
 use std::collections::hash_map::HashMap;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
@@ -37,14 +39,14 @@ impl<'a, Context, Channel: Hash + Eq + Clone, Payload: Clone> Pubsub<'a, Context
   }
 
   fn process_event(&mut self, event: Event<Channel, Payload>)  {
-    let listeners_entry = self.listeners.entry(&event.channel);
+    let listeners_entry = self.listeners.entry(event.channel);
     let ref mut context = self.context;
 
     match listeners_entry {
       Occupied(mut listeners) => for listener in listeners.get_mut().iter() {
         let head = self.event_queue.clone();
         let tail = (*listener)(*context, event.payload.clone());
-        self.event_queue = head + tail.as_slice();
+        self.event_queue = head + &*tail;
       },
       Vacant(_) => ()
     }
@@ -73,7 +75,7 @@ impl<'a, Context, Channel: Hash + Eq + Clone, Payload: Clone> Pubsub<'a, Context
 #[test]
 fn no_listeners_should_not_change() {
   struct TestContext {
-    data: int
+    data: isize
   }
 
   let mut test_context = TestContext { data: 0 };
@@ -90,7 +92,7 @@ fn no_listeners_should_not_change() {
 #[test]
 fn noop_listener_should_not_change() {
   struct TestContext {
-    data: int
+    data: isize
   }
 
   let mut test_context = TestContext { data: 0 };
@@ -113,7 +115,7 @@ fn noop_listener_should_not_change() {
 #[test]
 fn listener_on_same_channel_should_change() {
   struct TestContext {
-    data: int
+    data: isize
   }
 
   let mut test_context = TestContext { data: 0 };
@@ -137,7 +139,7 @@ fn listener_on_same_channel_should_change() {
 #[test]
 fn listener_on_different_channel_should_not_change() {
   struct TestContext {
-    data: int
+    data: isize
   }
 
   let mut test_context = TestContext { data: 0 };
@@ -161,7 +163,7 @@ fn listener_on_different_channel_should_not_change() {
 #[test]
 fn listener_can_trigger_more_events() {
   struct TestContext {
-    data: int
+    data: isize
   }
   let mut test_context = TestContext { data: 0 };
   let mut pubsub: Pubsub<TestContext, String, String> = Pubsub::new(&mut test_context);
